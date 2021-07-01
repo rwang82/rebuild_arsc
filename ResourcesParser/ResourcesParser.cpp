@@ -257,18 +257,16 @@ ResourcesParser::PackageResourcePtr ResourcesParser::parserPackageResource(
 	while(resources.read((char*)&chunkHeader, sizeof(ResChunk_header))) {
 		resources.seekg(-sizeof(ResChunk_header), ios::cur);
 
-		cout<<"[ChunkType]:0x"<<hex<<chunkHeader.type<<endl;
-
 		if(chunkHeader.type == RES_TABLE_PACKAGE_TYPE) {
 			return pPool;
 		} else if(chunkHeader.type == RES_TABLE_TYPE_TYPE) {
 			ResTableTypePtr pResTableType = make_shared<ResTableType>();
 			resources.read((char*)&pResTableType->header, sizeof(ResTable_type));
+            //
 			uint32_t seek = pResTableType->header.header.headerSize - sizeof(ResTable_type);
 			resources.seekg(seek, ios::cur);
             cout<<"[seek]#####"<<dec<<seek<<endl;
-
-                        cout<<"[ResTableTypeId]:"<<dec<<(unsigned int)pResTableType->header.id<<", [EntryCount]:"<<pResTableType->header.entryCount<<", [EntriesStart]:"<<pResTableType->header.entriesStart<<", [config]:"<<pResTableType->header.config.toString()<<endl;
+            cout<<"[0x"<<hex<<chunkHeader.type<<"][ResTableTypeId]:"<<dec<<(unsigned int)pResTableType->header.id<<", [EntryCount]:"<<pResTableType->header.entryCount<<", [EntriesStart]:"<<pResTableType->header.entriesStart<<", [config]:"<<pResTableType->header.config.toString()<<endl;
 
 			pResTableType->entryPool = parserEntryPool(
 					resources,
@@ -289,8 +287,18 @@ ResourcesParser::PackageResourcePtr ResourcesParser::parserPackageResource(
 //				cout<<"["<<pEntry->key.index<<"]"<<getStringFromResStringPool(pPool->pKeys,pEntry->key.index)<<endl;
 			}
 		} else {
-            cout<<"[other chunk] type:"<<chunkHeader.type<<endl;
-			resources.seekg(chunkHeader.size, ios::cur);
+            cout<<"[0x"<<hex<<chunkHeader.type<<"] type:"<<dec<<chunkHeader.type<<", size:"<<chunkHeader.size<<endl;
+//			resources.seekg(chunkHeader.size, ios::cur);
+			ResTableTypeUnknownPtr pResTableTypeUnknownPtr = make_shared<ResTableTypeUnknown>();
+            pResTableTypeUnknownPtr->pChunkAllData = shared_ptr<byte>(
+			    new byte[chunkHeader.size],
+                default_delete<byte[]>()
+            );
+			resources.read((char*)pResTableTypeUnknownPtr->pChunkAllData.get(), chunkHeader.size);
+            pPool->vecResTableUnknownPtrs.push_back(pResTableTypeUnknownPtr);
+
+            printHex((unsigned char*)pResTableTypeUnknownPtr->pChunkAllData.get(), sizeof(ResChunk_header));
+            
 		}
 	}
 

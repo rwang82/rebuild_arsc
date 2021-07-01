@@ -42,11 +42,17 @@ public:
 	};
 	typedef std::shared_ptr<ResTableType> ResTableTypePtr;
 
+    struct ResTableTypeUnknown {
+        std::shared_ptr<byte> pChunkAllData;
+    };
+    typedef std::shared_ptr<ResTableTypeUnknown> ResTableTypeUnknownPtr;
+
 	struct PackageResource {
 		ResTable_package header;
 		ResStringPoolPtr pTypes;
 		ResStringPoolPtr pKeys;
 		std::map<int, std::vector<ResTableTypePtr> > resTablePtrs;
+        std::vector<ResTableTypeUnknownPtr> vecResTableUnknownPtrs;
 	};
 	typedef std::shared_ptr<PackageResource> PackageResourcePtr;
 

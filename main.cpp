@@ -14,7 +14,7 @@ void rebuild_arscfile(ResourcesParser parser);
 void writeStringPool(FILE* pFile, ResourcesParser::ResStringPool* pStringPool);
 void writePackageResource(FILE* pFile, ResourcesParser::PackageResource* pPkgRes);
 void writeResTableType(FILE* pFile, ResourcesParser::ResTableType* pResTable);
-void writeResTableSpec(FILE* pFile, ResourcesParser::ResTableType* pResTable);
+void writeResTableUnknown(FILE* pFile, ResourcesParser::ResTableTypeUnknown* pResTableUnknown);
 
 int main(int argc, char *argv[]) {
 	const char* path = getArgv("-p", argv, argc);
@@ -83,6 +83,14 @@ void writePackageResource(FILE* pFile, ResourcesParser::PackageResource* pPkgRes
     // write ResName string pool
     writeStringPool(pFile, pPkgRes->pKeys.get());
 
+    int sizeFileCur = ftell(pFile);
+    cout<<" ### [sizeFileCur]:0x"<<hex<<sizeFileCur<<dec<<endl;
+
+    //
+    for (auto &itemResTableUnknownPtr : pPkgRes->vecResTableUnknownPtrs) {
+        writeResTableUnknown(pFile, itemResTableUnknownPtr.get());
+    }
+
     //
     for (auto &itemKV : pPkgRes->resTablePtrs) {
         std::vector<ResourcesParser::ResTableTypePtr>& vectorResTable = itemKV.second;
@@ -91,11 +99,8 @@ void writePackageResource(FILE* pFile, ResourcesParser::PackageResource* pPkgRes
                 case RES_TABLE_TYPE_TYPE: {
                     writeResTableType(pFile, resTableItem.get());
                 } break;
-                case RES_TABLE_TYPE_SPEC_TYPE: {
-                    writeResTableSpec(pFile, resTableItem.get());
-                } break;
                 default:
-                    break;
+                break;
             }
         }
     }
@@ -108,7 +113,7 @@ void writeResTableType(FILE* pFile, ResourcesParser::ResTableType* pResTable) {
         return;
     }
     // 
-    fwrite(&(pResTable->header), sizeof(ResourcesParser::ResTableType), 1, pFile);
+    fwrite(&(pResTable->header), sizeof(ResTable_type), 1, pFile);
 
     // fill 28 space.
     uint32_t seek = pResTable->header.header.headerSize - sizeof(ResTable_type);
@@ -138,10 +143,12 @@ void writeResTableType(FILE* pFile, ResourcesParser::ResTableType* pResTable) {
     fwrite(pResTable->entryPool.pData.get(), 1, pResTable->entryPool.dataSize, pFile);
 }
 
-void writeResTableSpec(FILE* pFile, ResourcesParser::ResTableType* pResTable) {
+void writeResTableUnknown(FILE* pFile, ResourcesParser::ResTableTypeUnknown* pResTableUnknown) {
+    ResChunk_header* pChunkHeader = (ResChunk_header*)pResTableUnknown->pChunkAllData.get();
     
-
-
+    fwrite(pResTableUnknown->pChunkAllData.get(), 1, pChunkHeader->size, pFile);
+    
+    printHex((unsigned char*)pResTableUnknown->pChunkAllData.get(), sizeof(ResChunk_header));
 }
 
 void writeStringPool(FILE* pFile, ResourcesParser::ResStringPool* pStringPool) {
