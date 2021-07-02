@@ -87,6 +87,11 @@ inline static string toUtf8(const u16string& str16) {
 		.to_bytes(str16);
 }
 
+inline static u16string toUtf16(const string& strUtf8) {
+    return wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t>()
+        .from_bytes(strUtf8);
+}
+
 ResourcesParser::ResourcesParser(const string& filePath) {
 	ifstream resources(filePath, ios::in|ios::binary);
 
@@ -147,6 +152,9 @@ void printChunkHeader(ResChunk_header* pChunkHeader) {
 
 ResourcesParser::ResStringPoolPtr ResourcesParser::parserResStringPool(
 		ifstream& resources) {
+    int32_t uCur = resources.tellg();
+    cout<<"[StringPoll] start: 0x"<<hex<<uCur<<dec<<endl;
+    
 	ResStringPoolPtr pPool = make_shared<ResStringPool>();
 	resources.read((char*)&pPool->header, sizeof(ResStringPool_header));
         //printHex((unsigned char*)&(pPool->header), 10);
@@ -174,8 +182,10 @@ ResourcesParser::ResStringPoolPtr ResourcesParser::parserResStringPool(
 		- offsetSize;
 	resources.seekg(seek, ios::cur);
 
-    const uint32_t styleOffsetSize = sizeof(uint32_t) * pPool->header.styleCount;
-    cout<<"[seek]:"<<seek<<", [styleOffsetSize]:"<<styleOffsetSize<<endl;
+    if (seek == 0) {
+        const uint32_t styleOffsetSize = sizeof(uint32_t) * pPool->header.styleCount;
+        cout<<"[seek]:"<<seek<<", [styleOffsetSize]:"<<styleOffsetSize<<endl;
+    }
 
 	// 载入所有字符串
 	const uint32_t strBuffSize = pPool->header.styleCount > 0
@@ -284,7 +294,7 @@ ResourcesParser::PackageResourcePtr ResourcesParser::parserPackageResource(
 				Res_value* pValue = getValueFromEntry(pEntry);
 				pResTableType->entries.push_back(pEntry);
 				pResTableType->values.push_back(pValue);
-//				cout<<"["<<pEntry->key.index<<"]"<<getStringFromResStringPool(pPool->pKeys,pEntry->key.index)<<endl;
+			//	cout<<"["<<pEntry->key.index<<"]"<<getStringFromResStringPool(pPool->pKeys,pEntry->key.index)<<endl;
 			}
 		} else {
             cout<<"[0x"<<hex<<chunkHeader.type<<"] type:"<<dec<<chunkHeader.type<<", size:"<<chunkHeader.size<<endl;
@@ -471,4 +481,71 @@ string ResourcesParser::getValueTypeForResTableMap(const Res_value& value) const
 		default:
 			return "unknown";
 	}
+}
+
+uint32_t ResourcesParser::ResStringPool::addNewString(std::string newStr) {
+    uint32_t uTotalAdd = 0;
+    std::shared_ptr<uint32_t> pOffsetsNew = shared_ptr<uint32_t>(
+        new uint32_t[header.stringCount+1],
+        default_delete<uint32_t[]>()
+    );
+    // add new string offset
+    memcpy(pOffsetsNew.get(), pOffsets.get(), header.stringCount*sizeof(uint32_t));
+    uint32_t* pRawBuf = pOffsetsNew.get(); 
+    uint32_t newStringStart = (header.styleCount > 0)
+        ? (header.stylesStart - header.stringsStart)
+        : (header.header.size - header.stringsStart);
+    *(pRawBuf + header.stringCount) = newStringStart; // nee more code here.
+
+    //
+    header.stringCount += 1; 
+    if (header.stylesStart != 0) {
+        header.stylesStart += sizeof(uint32_t);
+    }
+
+    // 交换内存
+    pOffsets.swap(pOffsetsNew);
+
+    // 块大小增加一个offset标记的大小.
+    header.header.size += sizeof(uint32_t);
+
+    // 开始增加字符串长度和内容
+    const uint32_t sizeStrBufOrigin = header.styleCount > 0
+        ? header.stylesStart - header.stringsStart
+        : header.header.size - header.stringsStart;
+    if (header.flags & ResStringPool_header::UTF8_FLAG) {
+
+    } else {
+        u16string newStr16 = toUtf16(newStr);
+        uint16_t uLenStrNew = (header.flags & ResStringPool_header::UTF8_FLAG) ? (newStr.size() + 1) : ((newStr.size()+1)*2); 
+        这里还需要更多代码
+    }
+
+
+// unsigned char* pStrBufNew = new unsigned char[uLenStrNew];
+//    pStrBufNew = shared_ptr<byte>(new byte[uLenStrNew], default_delete<byte[]>());
+//    memset(pStrBufNew.get(), 0, uLenStrNew);
+//    memcpy(pStrBufNew.get(), pStrings.get(), sizeStrBufOrigin);
+//    memcpy(pStrBufNew.get()+sizeStrBufOrigin, &(uLenStrNew), 2); // 2个字节存储字符串长度.
+//    memcpy(pStrBufNew.get()+sizeStrBufOrigin+2, newStr.to_string(), uLenStrNew);
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    // 可能要设计后面style offset 需要更多代码，和整体的包大小也要改.
+     
+    
+
+    return uTotalAdd;
+}
+
+void ResourcesParser::PackageResource::addKeyResStr(std::string& type, std::string& key) {
+    pKeys.get()->addNewString(key);
+    
 }

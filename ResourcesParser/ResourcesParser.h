@@ -30,6 +30,8 @@ public:
         std::shared_ptr<uint32_t> pStyleOffsets;
 		std::shared_ptr<byte> pStrings;
         std::shared_ptr<byte> pStyles;
+
+        uint32_t addNewString(std::string newStr);
 	};
 	typedef std::shared_ptr<ResStringPool> ResStringPoolPtr;
 
@@ -53,6 +55,8 @@ public:
 		ResStringPoolPtr pKeys;
 		std::map<int, std::vector<ResTableTypePtr> > resTablePtrs;
         std::vector<ResTableTypeUnknownPtr> vecResTableUnknownPtrs;
+
+        void addKeyResStr(std::string& type, std::string& key);
 	};
 	typedef std::shared_ptr<PackageResource> PackageResourcePtr;
 
