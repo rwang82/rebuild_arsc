@@ -42,6 +42,11 @@ int main(int argc, char *argv[]) {
 	}
 */	
 
+    //res/xml/network_security_config.xml
+    
+    uint32_t newResKeyId = parser.addResKeyStr("", "xml", "network_security_config");
+    cout<<"[newResKeyId]:" << newResKeyId << endl;
+
     rebuild_arscfile(parser);
 
 	return 0;
@@ -148,7 +153,7 @@ void writeResTableUnknown(FILE* pFile, ResourcesParser::ResTableTypeUnknown* pRe
     
     fwrite(pResTableUnknown->pChunkAllData.get(), 1, pChunkHeader->size, pFile);
     
-    printHex((unsigned char*)pResTableUnknown->pChunkAllData.get(), sizeof(ResChunk_header));
+    //printHex((unsigned char*)pResTableUnknown->pChunkAllData.get(), sizeof(ResChunk_header));
 }
 
 void writeStringPool(FILE* pFile, ResourcesParser::ResStringPool* pStringPool) {

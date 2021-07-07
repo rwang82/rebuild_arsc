@@ -22,6 +22,7 @@ public:
 		std::shared_ptr<byte> pData;
 		uint32_t dataSize;
 		uint32_t offsetCount;
+        uint32_t addNewEntry(uint16_t flags, uint32_t idxResKeyName, uint8_t dataType, uint32_t idValue);
 	};
 
 	struct ResStringPool {
@@ -31,7 +32,8 @@ public:
 		std::shared_ptr<byte> pStrings;
         std::shared_ptr<byte> pStyles;
 
-        uint32_t addNewString(std::string newStr);
+        uint32_t addNewString(std::string& newStr);
+        uint32_t getStrIdx(const std::string& destStr);
 	};
 	typedef std::shared_ptr<ResStringPool> ResStringPoolPtr;
 
@@ -41,6 +43,8 @@ public:
 		std::vector<ResTable_entry*> entries;
 		std::vector<Res_value*> values;
 		std::vector<std::vector<ResTable_map*> > maps;
+
+        uint32_t addNewEntry(uint16_t flags, uint32_t idResKeyName, uint8_t dataType, uint32_t idValue);
 	};
 	typedef std::shared_ptr<ResTableType> ResTableTypePtr;
 
@@ -55,8 +59,6 @@ public:
 		ResStringPoolPtr pKeys;
 		std::map<int, std::vector<ResTableTypePtr> > resTablePtrs;
         std::vector<ResTableTypeUnknownPtr> vecResTableUnknownPtrs;
-
-        void addKeyResStr(std::string& type, std::string& key);
 	};
 	typedef std::shared_ptr<PackageResource> PackageResourcePtr;
 
@@ -84,7 +86,11 @@ public:
 
 	std::string stringOfValue(const Res_value* value) const;
 
-        void printResStrPool(ResStringPoolPtr pResStringPool);
+    void printResStrPool(ResStringPoolPtr pResStringPool);
+
+    // return -1 means failed. others means success.
+    uint32_t addResKeyStr(std::string pkgName, std::string resType, std::string resKeyStr);
+
 
 public:
 	ResTable_header mResourcesInfo;

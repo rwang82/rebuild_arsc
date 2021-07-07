@@ -97,7 +97,7 @@ ResourcesParser::ResourcesParser(const string& filePath) {
 
 	// resources文件开头是个ResTable_header,记录整个文件的信息
 	resources.read((char*)&mResourcesInfo, sizeof(ResTable_header));
-	printHex((unsigned char*)&mResourcesInfo, sizeof(ResTable_header));
+	//printHex((unsigned char*)&mResourcesInfo, sizeof(ResTable_header));
 
 	// 紧接着就是全局字符串池
 	mGlobalStringPool = parserResStringPool(resources);
@@ -157,7 +157,7 @@ ResourcesParser::ResStringPoolPtr ResourcesParser::parserResStringPool(
     
 	ResStringPoolPtr pPool = make_shared<ResStringPool>();
 	resources.read((char*)&pPool->header, sizeof(ResStringPool_header));
-        //printHex((unsigned char*)&(pPool->header), 10);
+    //printHex((unsigned char*)&(pPool->header), sizeof(ResStringPool_header));
 	printChunkHeader(&pPool->header.header);
 	if(pPool->header.header.type != RES_STRING_POOL_TYPE) {
 		cout<<"["<<pPool->header.header.type<<"]parserResStringPool 需要定位到 RES_STRING_POOL_TYPE !"<<endl;
@@ -272,11 +272,12 @@ ResourcesParser::PackageResourcePtr ResourcesParser::parserPackageResource(
 		} else if(chunkHeader.type == RES_TABLE_TYPE_TYPE) {
 			ResTableTypePtr pResTableType = make_shared<ResTableType>();
 			resources.read((char*)&pResTableType->header, sizeof(ResTable_type));
+            cout<<"[after read ResTableType][0x"<<hex<<resources.tellg()<<"]["<<dec<<pResTableType->header.header.headerSize<<"]"<<endl;
             //
 			uint32_t seek = pResTableType->header.header.headerSize - sizeof(ResTable_type);
 			resources.seekg(seek, ios::cur);
-            cout<<"[seek]#####"<<dec<<seek<<endl;
-            cout<<"[0x"<<hex<<chunkHeader.type<<"][ResTableTypeId]:"<<dec<<(unsigned int)pResTableType->header.id<<", [EntryCount]:"<<pResTableType->header.entryCount<<", [EntriesStart]:"<<pResTableType->header.entriesStart<<", [config]:"<<pResTableType->header.config.toString()<<endl;
+            //cout<<"[seek]#####"<<dec<<seek<<endl;
+            cout<<"[0x"<<hex<<chunkHeader.type<<"][0x"<<resources.tellg()<<"][ResTableTypeId]:"<<dec<<(unsigned int)pResTableType->header.id<<", [EntryCount]:"<<pResTableType->header.entryCount<<", [EntriesStart]:"<<pResTableType->header.entriesStart<<", [config]:"<<pResTableType->header.config.toString()<<endl;
 
 			pResTableType->entryPool = parserEntryPool(
 					resources,
@@ -307,7 +308,7 @@ ResourcesParser::PackageResourcePtr ResourcesParser::parserPackageResource(
 			resources.read((char*)pResTableTypeUnknownPtr->pChunkAllData.get(), chunkHeader.size);
             pPool->vecResTableUnknownPtrs.push_back(pResTableTypeUnknownPtr);
 
-            printHex((unsigned char*)pResTableTypeUnknownPtr->pChunkAllData.get(), sizeof(ResChunk_header));
+            //printHex((unsigned char*)pResTableTypeUnknownPtr->pChunkAllData.get(), sizeof(ResChunk_header));
             
 		}
 	}
@@ -483,7 +484,7 @@ string ResourcesParser::getValueTypeForResTableMap(const Res_value& value) const
 	}
 }
 
-uint32_t ResourcesParser::ResStringPool::addNewString(std::string newStr) {
+uint32_t ResourcesParser::ResStringPool::addNewString(std::string& newStr) {
     uint32_t uTotalAdd = 0;
     std::shared_ptr<uint32_t> pOffsetsNew = shared_ptr<uint32_t>(
         new uint32_t[header.stringCount+1],
@@ -491,61 +492,198 @@ uint32_t ResourcesParser::ResStringPool::addNewString(std::string newStr) {
     );
     // add new string offset
     memcpy(pOffsetsNew.get(), pOffsets.get(), header.stringCount*sizeof(uint32_t));
-    uint32_t* pRawBuf = pOffsetsNew.get(); 
     uint32_t newStringStart = (header.styleCount > 0)
         ? (header.stylesStart - header.stringsStart)
         : (header.header.size - header.stringsStart);
-    *(pRawBuf + header.stringCount) = newStringStart; // nee more code here.
-
-    //
-    header.stringCount += 1; 
-    if (header.stylesStart != 0) {
-        header.stylesStart += sizeof(uint32_t);
-    }
-
+    *(pOffsetsNew.get() + header.stringCount) = newStringStart; 
     // 交换内存
     pOffsets.swap(pOffsetsNew);
 
-    // 块大小增加一个offset标记的大小.
-    header.header.size += sizeof(uint32_t);
+    // 记录 offset 新增内存大小
+    uTotalAdd += sizeof(uint32_t);
 
     // 开始增加字符串长度和内容
     const uint32_t sizeStrBufOrigin = header.styleCount > 0
         ? header.stylesStart - header.stringsStart
         : header.header.size - header.stringsStart;
+    uint16_t uLenStrNew = newStr.length(); // 无论 utf8 还是 utf16， 这里记录的是字符数，不包括最后的 0 结束符.
     if (header.flags & ResStringPool_header::UTF8_FLAG) {
-
+        uint32_t uSizeBufNew = sizeStrBufOrigin + (2 + uLenStrNew + 1);
+        shared_ptr<byte> pBufStrDataNew = shared_ptr<byte>(new byte[uSizeBufNew], default_delete<byte[]>());
+        memset(pBufStrDataNew.get(), 0, uSizeBufNew);
+        memcpy(pBufStrDataNew.get(), pStrings.get(), sizeStrBufOrigin); // 把之前老的复制到前面.
+        memcpy(pBufStrDataNew.get() + sizeStrBufOrigin, &uLenStrNew, 2); // 写新添加字符串的长度
+        memcpy(pBufStrDataNew.get() + sizeStrBufOrigin + 2, newStr.c_str(), uLenStrNew + 1); // 把空结束符的字符串拷贝进去
+        pStrings.swap(pBufStrDataNew);
+        //
+        uTotalAdd += (uSizeBufNew - sizeStrBufOrigin);
     } else {
         u16string newStr16 = toUtf16(newStr);
-        uint16_t uLenStrNew = (header.flags & ResStringPool_header::UTF8_FLAG) ? (newStr.size() + 1) : ((newStr.size()+1)*2); 
-        这里还需要更多代码
+        uint16_t uSizeBufNew = 2 + (uLenStrNew + 1)*2;
+        shared_ptr<byte> pBufStrDataNew = shared_ptr<byte>(new byte[uSizeBufNew], default_delete<byte[]>());
+        memset(pBufStrDataNew.get(), 0, uSizeBufNew);
+        memcpy(pBufStrDataNew.get(), pStrings.get(), sizeStrBufOrigin);
+        memcpy(pBufStrDataNew.get() + sizeStrBufOrigin, &uLenStrNew, 2); // 写新添加字符串的长度.
+        memcpy(pBufStrDataNew.get() + sizeStrBufOrigin + 2, newStr16.c_str(), (uLenStrNew+1)*2 ); // 
+        pStrings.swap(pBufStrDataNew);
+        //
+        uTotalAdd += (uSizeBufNew - sizeStrBufOrigin);
     }
-
-
-// unsigned char* pStrBufNew = new unsigned char[uLenStrNew];
-//    pStrBufNew = shared_ptr<byte>(new byte[uLenStrNew], default_delete<byte[]>());
-//    memset(pStrBufNew.get(), 0, uLenStrNew);
-//    memcpy(pStrBufNew.get(), pStrings.get(), sizeStrBufOrigin);
-//    memcpy(pStrBufNew.get()+sizeStrBufOrigin, &(uLenStrNew), 2); // 2个字节存储字符串长度.
-//    memcpy(pStrBufNew.get()+sizeStrBufOrigin+2, newStr.to_string(), uLenStrNew);
-
-
     
+    // 字符串统计+1
+    header.stringCount += 1; 
+    // update meta data.
+    header.stringsStart += sizeof(uint32_t);
+    // 调码整 style起始位置, style偏移数组里面的值. 
+    if (header.stylesStart > 0) {
+        header.stylesStart += uTotalAdd;
+    }
     
-    
-    
-    
-    
-    
-    
-    // 可能要设计后面style offset 需要更多代码，和整体的包大小也要改.
-     
-    
-
+    // 整体字符串包大小也要改.
+    header.header.size += uTotalAdd;
+    //
     return uTotalAdd;
 }
 
-void ResourcesParser::PackageResource::addKeyResStr(std::string& type, std::string& key) {
-    pKeys.get()->addNewString(key);
-    
+// return -1 measn failed. others means success.
+uint32_t ResourcesParser::ResStringPool::getStrIdx(const std::string& destStr) {
+    if (destStr.length() == 0) {
+        return -1;
+    }
+    if (header.stringCount == 0) {
+        return -1;
+    }
+    for (uint32_t idx = 0; idx<header.stringCount; ++idx) {
+        uint32_t offset = *(pOffsets.get() + idx);
+        char* str = ((char*)(pStrings.get() + offset + 2));
+        std::string itemStr = (header.flags & ResStringPool_header::UTF8_FLAG) ? str : toUtf8((char16_t*)str);
+        if (itemStr.compare(destStr) == 0) {
+            return idx;
+        }
+    }
+    return -1; //没有匹配上.
 }
+
+uint32_t ResourcesParser::EntryPool::addNewEntry(uint16_t flags, uint32_t idxResKeyName, uint8_t dataType, uint32_t idxValue) {
+    uint32_t newEntryOffset = dataSize;
+    // update pOffsets
+    std::shared_ptr<uint32_t> pOffsetsNew = shared_ptr<uint32_t>(
+            new uint32_t[offsetCount+1],
+            default_delete<uint32_t[]>()
+    );
+    memcpy(pOffsetsNew.get(), pOffsets.get(), sizeof(uint32_t)*offsetCount);
+    memcpy(pOffsetsNew.get()+offsetCount, &newEntryOffset, sizeof(uint32_t));
+    pOffsets.swap(pOffsetsNew);
+    // update offsetCount
+    offsetCount += 1;
+
+    // update pData.
+    uint32_t newDataSize = dataSize + sizeof(ResTable_entry) + sizeof(Res_value);
+    std::shared_ptr<byte> pDataNew = shared_ptr<byte>(
+            new byte[newDataSize], 
+            default_delete<byte[]>()
+    );
+    memcpy(pDataNew.get(), pData.get(), dataSize);
+    ResTable_entry* pResTableEntry = (ResTable_entry*)(pDataNew.get()+dataSize);
+    pResTableEntry->size = 8;
+    pResTableEntry->flags = flags;
+    pResTableEntry->key.index = idxResKeyName;
+    Res_value* pResValue = (Res_value*)(pDataNew.get() + dataSize + sizeof(ResTable_entry));
+    pResValue->size = 8;
+    pResValue->res0 = 0;
+    pResValue->dataType = dataType;
+    pResValue->data = idxValue;
+    pData.swap(pDataNew);
+    //
+    dataSize = newDataSize;
+
+    uint32_t uAddSize = sizeof(uint32_t) + sizeof(ResTable_entry) + sizeof(Res_value);
+    return uAddSize;
+}
+
+uint32_t ResourcesParser::ResTableType::addNewEntry(uint16_t flags, uint32_t idxResKeyName, uint8_t dataType, uint32_t idxValue) {
+    uint32_t uAddSizeEntryPool = entryPool.addNewEntry(flags, idxResKeyName, dataType, idxValue);
+    // update size and other info.
+    header.header.size += uAddSizeEntryPool;
+    header.entryCount += 1;
+    header.entriesStart += sizeof(uint32_t); //多了一个偏移
+
+    //
+    uint32_t lastEntryOffset = *(entryPool.pOffsets.get() + (header.entryCount - 1));
+    ResTable_entry* pResTableEntry = ((ResTable_entry*)(entryPool.pData.get() + lastEntryOffset));
+    Res_value* pResValue = (Res_value*)((byte*)pResTableEntry + pResTableEntry->size);
+
+    entries.push_back(pResTableEntry);
+    values.push_back(pResValue);
+
+    return uAddSizeEntryPool;
+}
+
+uint32_t ResourcesParser::addResKeyStr(std::string pkgName, std::string resType, std::string resKeyStr) {
+    PackageResource* pPkgRes = nullptr; 
+    if (pkgName.length() == 0) {
+        std::map<std::string, PackageResourcePtr>::iterator it; 
+        for (it = mResourceForPackageName.begin(); it!=mResourceForPackageName.end(); ++it) {
+            cout<<"res_pkg_name: "<<it->first<<endl;
+            pPkgRes = it->second.get();
+            break; //只取第一个
+        }
+    } else {
+        std::map<std::string, PackageResourcePtr>::iterator dest;
+        dest = mResourceForPackageName.find(pkgName);
+        if (dest!=mResourceForPackageName.end()) {
+            pPkgRes = dest->second.get();
+        }
+    }
+    if (pPkgRes == nullptr) {
+        cout<< "[error] pPkgRes == nullptr"<<endl;
+        return 0;
+    }
+
+    // add key string
+    uint32_t uKeyAddSize = pPkgRes->pKeys.get()->addNewString(resKeyStr);
+    pPkgRes->header.header.size += uKeyAddSize;
+    mResourcesInfo.header.size += uKeyAddSize;
+    // calc resKeyStr Id 
+    if (pPkgRes->pKeys.get()->header.stringCount <= 0) {
+        cout<<"[error] stringCount <= 0" <<endl;
+        return 0;
+    }
+    uint32_t newResNameIdx = pPkgRes->pKeys.get()->header.stringCount - 1;
+
+    // add value string to mGlobalStringPool
+    std::string destValue = ("/res/" + resType + "/" + resKeyStr + ".xml");
+    uint32_t uValueAddSize = mGlobalStringPool.get()->addNewString(destValue);
+    mResourcesInfo.header.size += uValueAddSize;
+    // calc value string Id
+    uint32_t newDestValueIdx = mGlobalStringPool.get()->header.stringCount - 1;
+
+    // find the ResTableTypeId
+    uint32_t idType = pPkgRes->pTypes.get()->getStrIdx(resType) + 1;
+    if (idType < 0) {
+        cout<<"[error] idType < 0" <<endl;
+        return 0;
+    }
+    std::vector<ResTableTypePtr> vecResTableTypePtr =  pPkgRes->resTablePtrs[idType]; 
+    if (vecResTableTypePtr.size() == 0) {
+        cout<<"[error]["<<idType<<"] vecResTableTypePtr.size() == 0" << endl;
+        return 0;
+    }
+    ResTableType* pResTableType = vecResTableTypePtr[0].get();
+
+    // add new res entry info to res table.
+    uint32_t uAddSizeNewEntry = pResTableType->addNewEntry(0x00, newResNameIdx, Res_value::TYPE_STRING, newDestValueIdx);
+    pPkgRes->header.header.size += uAddSizeNewEntry;
+    mResourcesInfo.header.size += uAddSizeNewEntry;
+     
+
+
+    // for test
+//    uint32_t idxDest = 0x1BE;
+//    std::string str1 = getStringFromResStringPool(mGlobalStringPool, idxDest);
+//    cout<<"str1:"<<str1<<endl;
+
+
+    return newResNameIdx;
+}
+
