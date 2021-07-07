@@ -91,6 +91,17 @@ public:
     // return -1 means failed. others means success.
     uint32_t addResKeyStr(std::string pkgName, std::string resType, std::string resKeyStr);
 
+    bool saveToFile(const std::string& destFName);
+
+    void writeStringPool(FILE* pFile, ResStringPool* pStringPool);
+
+    void writePackageResource(FILE* pFile, PackageResource* pPkgRes);
+
+    void writeResTableType(FILE* pFile, ResTableType* pResTable);
+
+    void writeResTableUnknown(FILE* pFile, ResTableTypeUnknown* pResTableUnknown);
+
+
 
 public:
 	ResTable_header mResourcesInfo;

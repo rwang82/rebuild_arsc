@@ -682,3 +682,134 @@ uint32_t ResourcesParser::addResKeyStr(std::string pkgName, std::string resType,
     return newResId;
 }
 
+bool ResourcesParser::saveToFile(const std::string& destFName) {
+    FILE* pFile = fopen(destFName.c_str(), "w+");
+    if (pFile == nullptr) {
+       cout<<"pFile == nullptr, exit"<<endl;
+       return false;
+    }
+
+    // 写 ResTable_header
+    fwrite(&(mResourcesInfo), sizeof(ResTable_header), 1, pFile);
+
+    // 写 Global String Pool
+    writeStringPool(pFile, mGlobalStringPool.get());
+
+    // 写 Table Package
+    for (auto &item : mResourceForPackageName) {
+        writePackageResource(pFile, item.second.get());
+    }
+
+
+    fclose( pFile );
+    return true;
+}
+
+void ResourcesParser::writeStringPool(FILE* pFile, ResStringPool* pStringPool) {
+    // write ResStringPool_header
+    fwrite(&(pStringPool->header), sizeof(ResStringPool_header), 1, pFile);
+
+    // write String offset array
+    if (pStringPool->header.stringCount > 0) {
+        const uint32_t sizeStrOffset = sizeof(uint32_t) * pStringPool->header.stringCount;
+        fwrite(pStringPool->pOffsets.get(), 1, sizeStrOffset, pFile);
+    }
+    //
+    if (pStringPool->header.styleCount > 0) {
+        const uint32_t sizeStyleOffset = sizeof(uint32_t) * pStringPool->header.styleCount;
+        fwrite(pStringPool->pStyleOffsets.get(), 1, sizeStyleOffset, pFile);
+    }
+    // write string array.
+    if (pStringPool->header.stringCount > 0) {
+        const uint32_t strBufSize = pStringPool->header.styleCount > 0
+            ? pStringPool->header.stylesStart - pStringPool->header.stringsStart
+            : pStringPool->header.header.size - pStringPool->header.stringsStart;
+        fwrite(pStringPool->pStrings.get(), 1, strBufSize, pFile);
+    }
+    // write style array.
+    if (pStringPool->header.styleCount > 0) {
+        const uint32_t styleBufSize = pStringPool->header.header.size - pStringPool->header.stylesStart;
+        fwrite(pStringPool->pStyles.get(), 1, styleBufSize, pFile);
+    }
+
+}
+
+
+void ResourcesParser::writePackageResource(FILE* pFile, PackageResource* pPkgRes) {
+    if (pPkgRes == nullptr) {
+        return;
+    }
+    // write ResTable_package
+    fwrite(&(pPkgRes->header), sizeof(ResTable_package), 1, pFile);
+
+    // write ResType string pool
+    writeStringPool(pFile, pPkgRes->pTypes.get());
+
+    // write ResName string pool
+    writeStringPool(pFile, pPkgRes->pKeys.get());
+
+    //
+    for (auto &itemResTableUnknownPtr : pPkgRes->vecResTableUnknownPtrs) {
+        writeResTableUnknown(pFile, itemResTableUnknownPtr.get());
+    }
+
+    //
+    for (auto &itemKV : pPkgRes->resTablePtrs) {
+        std::vector<ResourcesParser::ResTableTypePtr>& vectorResTable = itemKV.second;
+        for (auto resTableItem : vectorResTable) {
+            switch(resTableItem->header.header.type) {
+                case RES_TABLE_TYPE_TYPE: {
+                    writeResTableType(pFile, resTableItem.get());
+                } break;
+                default:
+                break;
+            }
+        }
+    }
+}
+
+void ResourcesParser::writeResTableType(FILE* pFile, ResTableType* pResTable) {
+    if (pFile == nullptr || pResTable == nullptr) {
+        return;
+    }
+    //
+    fwrite(&(pResTable->header), sizeof(ResTable_type), 1, pFile);
+
+    // fill 28 space.
+    uint32_t seek = pResTable->header.header.headerSize - sizeof(ResTable_type);
+    if (seek > 0) {
+        unsigned char* pBufTmp = new unsigned char[seek];
+        memset(pBufTmp, 0, seek);
+        fwrite(&pBufTmp, 1, seek, pFile);
+        delete []pBufTmp;
+        pBufTmp = nullptr;
+    }
+
+    // write entry offset array.
+    const uint32_t sizeEntryOffset = sizeof(uint32_t) * pResTable->header.entryCount;
+    fwrite(pResTable->entryPool.pOffsets.get(), sizeof(uint32_t), pResTable->header.entryCount, pFile);
+
+    // fill space to dataStart
+    const uint32_t sizeFill2DataStart = pResTable->header.entriesStart - pResTable->header.header.headerSize - sizeEntryOffset;
+    if (sizeFill2DataStart > 0) {
+        unsigned char* pBufTmp = new unsigned char[sizeFill2DataStart];
+        memset(pBufTmp, 0, sizeFill2DataStart);
+        fwrite(pBufTmp, 1, sizeFill2DataStart, pFile);
+        delete []pBufTmp;
+        pBufTmp = nullptr;
+    }
+
+    // write
+    fwrite(pResTable->entryPool.pData.get(), 1, pResTable->entryPool.dataSize, pFile);
+}
+
+void ResourcesParser::writeResTableUnknown(FILE* pFile, ResTableTypeUnknown* pResTableUnknown) {
+    ResChunk_header* pChunkHeader = (ResChunk_header*)pResTableUnknown->pChunkAllData.get();
+
+    fwrite(pResTableUnknown->pChunkAllData.get(), 1, pChunkHeader->size, pFile);
+
+}
+
+
+
+

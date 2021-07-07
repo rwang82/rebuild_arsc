@@ -47,7 +47,8 @@ int main(int argc, char *argv[]) {
     uint32_t newResKeyId = parser.addResKeyStr("", "xml", "network_security_config");
     cout<<"[newResId]:0x" << hex << newResKeyId << dec << endl;
 
-    rebuild_arscfile(parser);
+    parser.saveToFile("out.arsc");
+    //rebuild_arscfile(parser);
 
 	return 0;
 }
