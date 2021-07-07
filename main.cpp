@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
     //res/xml/network_security_config.xml
     
     uint32_t newResKeyId = parser.addResKeyStr("", "xml", "network_security_config");
-    cout<<"[newResKeyId]:" << newResKeyId << endl;
+    cout<<"[newResId]:0x" << hex << newResKeyId << dec << endl;
 
     rebuild_arscfile(parser);
 
@@ -87,9 +87,6 @@ void writePackageResource(FILE* pFile, ResourcesParser::PackageResource* pPkgRes
 
     // write ResName string pool
     writeStringPool(pFile, pPkgRes->pKeys.get());
-
-    int sizeFileCur = ftell(pFile);
-    cout<<" ### [sizeFileCur]:0x"<<hex<<sizeFileCur<<dec<<endl;
 
     //
     for (auto &itemResTableUnknownPtr : pPkgRes->vecResTableUnknownPtrs) {

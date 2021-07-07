@@ -272,12 +272,12 @@ ResourcesParser::PackageResourcePtr ResourcesParser::parserPackageResource(
 		} else if(chunkHeader.type == RES_TABLE_TYPE_TYPE) {
 			ResTableTypePtr pResTableType = make_shared<ResTableType>();
 			resources.read((char*)&pResTableType->header, sizeof(ResTable_type));
-            cout<<"[after read ResTableType][0x"<<hex<<resources.tellg()<<"]["<<dec<<pResTableType->header.header.headerSize<<"]"<<endl;
+//            cout<<"[after read ResTableType][0x"<<hex<<resources.tellg()<<"]["<<dec<<pResTableType->header.header.headerSize<<"]"<<endl;
             //
 			uint32_t seek = pResTableType->header.header.headerSize - sizeof(ResTable_type);
 			resources.seekg(seek, ios::cur);
             //cout<<"[seek]#####"<<dec<<seek<<endl;
-            cout<<"[0x"<<hex<<chunkHeader.type<<"][0x"<<resources.tellg()<<"][ResTableTypeId]:"<<dec<<(unsigned int)pResTableType->header.id<<", [EntryCount]:"<<pResTableType->header.entryCount<<", [EntriesStart]:"<<pResTableType->header.entriesStart<<", [config]:"<<pResTableType->header.config.toString()<<endl;
+//            cout<<"[0x"<<hex<<chunkHeader.type<<"][0x"<<resources.tellg()<<"][ResTableTypeId]:"<<dec<<(unsigned int)pResTableType->header.id<<", [EntryCount]:"<<pResTableType->header.entryCount<<", [EntriesStart]:"<<pResTableType->header.entriesStart<<", [config]:"<<pResTableType->header.config.toString()<<endl;
 
 			pResTableType->entryPool = parserEntryPool(
 					resources,
@@ -298,7 +298,7 @@ ResourcesParser::PackageResourcePtr ResourcesParser::parserPackageResource(
 			//	cout<<"["<<pEntry->key.index<<"]"<<getStringFromResStringPool(pPool->pKeys,pEntry->key.index)<<endl;
 			}
 		} else {
-            cout<<"[0x"<<hex<<chunkHeader.type<<"] type:"<<dec<<chunkHeader.type<<", size:"<<chunkHeader.size<<endl;
+            cout<<"[0x"<<hex<<chunkHeader.type<<"] size:0x"<<chunkHeader.size<<dec<<endl;
 //			resources.seekg(chunkHeader.size, ios::cur);
 			ResTableTypeUnknownPtr pResTableTypeUnknownPtr = make_shared<ResTableTypeUnknown>();
             pResTableTypeUnknownPtr->pChunkAllData = shared_ptr<byte>(
@@ -676,14 +676,9 @@ uint32_t ResourcesParser::addResKeyStr(std::string pkgName, std::string resType,
     pPkgRes->header.header.size += uAddSizeNewEntry;
     mResourcesInfo.header.size += uAddSizeNewEntry;
      
-
-
-    // for test
-//    uint32_t idxDest = 0x1BE;
-//    std::string str1 = getStringFromResStringPool(mGlobalStringPool, idxDest);
-//    cout<<"str1:"<<str1<<endl;
-
-
-    return newResNameIdx;
+    //
+    uint32_t newEntryIdx = pResTableType->entries.size() - 1;
+    uint32_t newResId = 0x7f000000 | ((0x000000FF&idType)<<16) | (0x0000FFFF&newEntryIdx);
+    return newResId;
 }
 
