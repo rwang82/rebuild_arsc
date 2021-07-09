@@ -484,13 +484,79 @@ string ResourcesParser::getValueTypeForResTableMap(const Res_value& value) const
 	}
 }
 
+uint32_t ResourcesParser::ResStringPool::addNewString_new(std::string& newStr) {
+    uint32_t uTotalAdd = 0;
+
+    // 开始增加字符串长度和内容
+    const uint32_t sizeStrBufOrigin = header.styleCount > 0
+        ? header.stylesStart - header.stringsStart
+        : header.header.size - header.stringsStart;
+    uint8_t uLenStrNew = newStr.size(); // 无论 utf8 还是 utf16， 这里记录的是字符数，不包括最后的 0 结束符.
+    cout<<"[ROM_DEBUG] len:"<<newStr.length()<<", size:"<<newStr.size()<<endl;
+    uint32_t uSizeNewStrBufAdd = 0;
+    if (header.flags & ResStringPool_header::UTF8_FLAG) {
+        uSizeNewStrBufAdd = 2 + uLenStrNew + 1; 
+        uint32_t uSizeBufNew = uSizeNewStrBufAdd + sizeStrBufOrigin; 
+        shared_ptr<byte> pBufStrDataNew = shared_ptr<byte>(new byte[uSizeBufNew], default_delete<byte[]>());
+        memset(pBufStrDataNew.get(), 0, uSizeBufNew);
+        memcpy(pBufStrDataNew.get(), &uLenStrNew, 1);
+        memcpy(pBufStrDataNew.get() + 1, &uLenStrNew, 1);
+        memcpy(pBufStrDataNew.get() + 2, newStr.c_str(), uLenStrNew + 1);
+        memcpy(pBufStrDataNew.get() + uSizeNewStrBufAdd, pStrings.get(), sizeStrBufOrigin); //把老数据拷贝过去.
+        pStrings.swap(pBufStrDataNew);
+        //
+        uTotalAdd += uSizeNewStrBufAdd;
+    } else {
+        u16string newStr16 = toUtf16(newStr);
+        uSizeNewStrBufAdd = 2 + (uLenStrNew + 1)*2; 
+        uint16_t uSizeBufNew = uSizeNewStrBufAdd + sizeStrBufOrigin;
+        shared_ptr<byte> pBufStrDataNew = shared_ptr<byte>(new byte[uSizeBufNew], default_delete<byte[]>());
+        memset(pBufStrDataNew.get(), 0, uSizeBufNew);
+        memcpy(pBufStrDataNew.get(), &uLenStrNew, 1);
+        memcpy(pBufStrDataNew.get() + 1, &uLenStrNew, 1);
+        memcpy(pBufStrDataNew.get() + 2, newStr.c_str(), (uLenStrNew + 1)*2);
+        memcpy(pBufStrDataNew.get() + uSizeNewStrBufAdd, pStrings.get(), sizeStrBufOrigin); //把老数据拷贝过去.
+        pStrings.swap(pBufStrDataNew);
+        //
+        uTotalAdd += uSizeNewStrBufAdd;
+    }
+    
+    // add new string offset
+    std::shared_ptr<uint32_t> pOffsetsNew = shared_ptr<uint32_t>(
+        new uint32_t[header.stringCount+1],
+        default_delete<uint32_t[]>()
+    );
+    *(pOffsetsNew.get()) = header.stringsStart + sizeof(uint32_t);
+    for (uint32_t idx = 0; idx<header.stringCount; ++idx) {
+       *(pOffsetsNew.get() + 1 + idx) = *(pOffsets.get() + idx) + sizeof(uint32_t) + uSizeNewStrBufAdd;
+    }
+    // 交换内存
+    pOffsets.swap(pOffsetsNew);
+    // 记录 offset 新增内存大小
+    uTotalAdd += sizeof(uint32_t);
+
+    // 字符串统计+1
+    header.stringCount += 1; 
+    // update meta data.
+    header.stringsStart += sizeof(uint32_t);
+    // 调码整 style起始位置, style偏移数组里面的值. 
+    if (header.stylesStart > 0) {
+        header.stylesStart += uTotalAdd;
+    }
+    
+    // 整体字符串包大小也要改.
+    header.header.size += uTotalAdd;
+
+    return uTotalAdd;
+}
+
 uint32_t ResourcesParser::ResStringPool::addNewString(std::string& newStr) {
     uint32_t uTotalAdd = 0;
     std::shared_ptr<uint32_t> pOffsetsNew = shared_ptr<uint32_t>(
         new uint32_t[header.stringCount+1],
         default_delete<uint32_t[]>()
     );
-    // add new string offset
+    // add new string offset)
     memcpy(pOffsetsNew.get(), pOffsets.get(), header.stringCount*sizeof(uint32_t));
     uint32_t newStringStart = (header.styleCount > 0)
         ? (header.stylesStart - header.stringsStart)
@@ -506,13 +572,15 @@ uint32_t ResourcesParser::ResStringPool::addNewString(std::string& newStr) {
     const uint32_t sizeStrBufOrigin = header.styleCount > 0
         ? header.stylesStart - header.stringsStart
         : header.header.size - header.stringsStart;
-    uint16_t uLenStrNew = newStr.length(); // 无论 utf8 还是 utf16， 这里记录的是字符数，不包括最后的 0 结束符.
+    uint8_t uLenStrNew = newStr.size(); // 无论 utf8 还是 utf16， 这里记录的是字符数，不包括最后的 0 结束符.
+    cout<<"[ROM_DEBUG] len:"<<newStr.length()<<", size:"<<newStr.size()<<endl;
     if (header.flags & ResStringPool_header::UTF8_FLAG) {
         uint32_t uSizeBufNew = sizeStrBufOrigin + (2 + uLenStrNew + 1);
         shared_ptr<byte> pBufStrDataNew = shared_ptr<byte>(new byte[uSizeBufNew], default_delete<byte[]>());
         memset(pBufStrDataNew.get(), 0, uSizeBufNew);
         memcpy(pBufStrDataNew.get(), pStrings.get(), sizeStrBufOrigin); // 把之前老的复制到前面.
-        memcpy(pBufStrDataNew.get() + sizeStrBufOrigin, &uLenStrNew, 2); // 写新添加字符串的长度
+        memcpy(pBufStrDataNew.get() + sizeStrBufOrigin, &uLenStrNew, 1); // 写新添加字符串的长度
+        memcpy(pBufStrDataNew.get() + sizeStrBufOrigin + 1, &uLenStrNew, 1); // 写新添加字符串的长度
         memcpy(pBufStrDataNew.get() + sizeStrBufOrigin + 2, newStr.c_str(), uLenStrNew + 1); // 把空结束符的字符串拷贝进去
         pStrings.swap(pBufStrDataNew);
         //
@@ -652,7 +720,7 @@ uint32_t ResourcesParser::addResKeyStr(std::string pkgName, std::string resType,
     uint32_t newResNameIdx = pPkgRes->pKeys.get()->header.stringCount - 1;
 
     // add value string to mGlobalStringPool
-    std::string destValue = ("/res/" + resType + "/" + resKeyStr + ".xml");
+    std::string destValue = ("res/" + resType + "/" + resKeyStr + ".xml");
     uint32_t uValueAddSize = mGlobalStringPool.get()->addNewString(destValue);
     mResourcesInfo.header.size += uValueAddSize;
     // calc value string Id
