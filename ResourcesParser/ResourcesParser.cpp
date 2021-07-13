@@ -153,8 +153,7 @@ void printChunkHeader(ResChunk_header* pChunkHeader) {
 ResourcesParser::ResStringPoolPtr ResourcesParser::parserResStringPool(
 		ifstream& resources) {
     int32_t uCur = resources.tellg();
-    cout<<"[StringPoll] start: 0x"<<hex<<uCur<<dec<<endl;
-    
+
 	ResStringPoolPtr pPool = make_shared<ResStringPool>();
 	resources.read((char*)&pPool->header, sizeof(ResStringPool_header));
     //printHex((unsigned char*)&(pPool->header), sizeof(ResStringPool_header));
@@ -163,10 +162,15 @@ ResourcesParser::ResStringPoolPtr ResourcesParser::parserResStringPool(
 		cout<<"["<<pPool->header.header.type<<"]parserResStringPool 需要定位到 RES_STRING_POOL_TYPE !"<<endl;
 		return nullptr;
 	}
+    cout<<hex<<"--[parser][StringPool]-------------------------------"<<endl;
+    cout<<"chunk_start: 0x"<<hex<<uCur<<dec<<endl;
+    cout<<"chunk size:"<<pPool->header.header.size<<endl;
     cout<<"stringCnt:"<<pPool->header.stringCount<<endl;
     cout<<"styleCnt:"<<pPool->header.styleCount<<endl;
-	cout<<"stringStart:"<<pPool->header.stringsStart<<endl;
-	cout<<"stylesStart:"<<pPool->header.stylesStart<<endl;
+	cout<<"stringStart: 0x"<<hex<<uCur + pPool->header.stringsStart<<endl;
+	cout<<"stylesStart: 0x"<<hex<<uCur + pPool->header.stylesStart<<endl;
+    cout<<"chunk_end: 0x"<<hex<<uCur + pPool->header.header.size<<endl;
+    cout<<dec<<"-----------------------------------------------------"<<endl;
 
 	pPool->pOffsets = shared_ptr<uint32_t>(
 			new uint32_t[pPool->header.stringCount],
@@ -484,7 +488,7 @@ string ResourcesParser::getValueTypeForResTableMap(const Res_value& value) const
 	}
 }
 
-uint32_t ResourcesParser::ResStringPool::addNewString_new(std::string& newStr) {
+uint32_t ResourcesParser::ResStringPool::addNewString(std::string& newStr) {
     uint32_t uTotalAdd = 0;
 
     // 开始增加字符串长度和内容
@@ -526,9 +530,9 @@ uint32_t ResourcesParser::ResStringPool::addNewString_new(std::string& newStr) {
         new uint32_t[header.stringCount+1],
         default_delete<uint32_t[]>()
     );
-    *(pOffsetsNew.get()) = header.stringsStart + sizeof(uint32_t);
+    *(pOffsetsNew.get()) = 0;
     for (uint32_t idx = 0; idx<header.stringCount; ++idx) {
-       *(pOffsetsNew.get() + 1 + idx) = *(pOffsets.get() + idx) + sizeof(uint32_t) + uSizeNewStrBufAdd;
+       *(pOffsetsNew.get() + 1 + idx) = *(pOffsets.get() + idx) + uSizeNewStrBufAdd;
     }
     // 交换内存
     pOffsets.swap(pOffsetsNew);
@@ -546,11 +550,12 @@ uint32_t ResourcesParser::ResStringPool::addNewString_new(std::string& newStr) {
     
     // 整体字符串包大小也要改.
     header.header.size += uTotalAdd;
+    cout<<"[StringPoolSize]now:" <<header.header.size << ", uTotalAdd:" << uTotalAdd <<endl;
 
     return uTotalAdd;
 }
 
-uint32_t ResourcesParser::ResStringPool::addNewString(std::string& newStr) {
+uint32_t ResourcesParser::ResStringPool::addNewString_old(std::string& newStr) {
     uint32_t uTotalAdd = 0;
     std::shared_ptr<uint32_t> pOffsetsNew = shared_ptr<uint32_t>(
         new uint32_t[header.stringCount+1],
@@ -774,6 +779,10 @@ bool ResourcesParser::saveToFile(const std::string& destFName) {
 }
 
 void ResourcesParser::writeStringPool(FILE* pFile, ResStringPool* pStringPool) {
+   //
+    int32_t uCur = ftell(pFile);
+    cout<<"[write][StringPool] start: 0x"<<hex<<uCur<<dec<<endl;
+   
     // write ResStringPool_header
     fwrite(&(pStringPool->header), sizeof(ResStringPool_header), 1, pFile);
 

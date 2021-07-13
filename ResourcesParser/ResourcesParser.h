@@ -32,8 +32,8 @@ public:
 		std::shared_ptr<byte> pStrings;
         std::shared_ptr<byte> pStyles;
 
-        uint32_t addNewString_new(std::string& newStr);
         uint32_t addNewString(std::string& newStr);
+        uint32_t addNewString_old(std::string& newStr);
         uint32_t getStrIdx(const std::string& destStr);
 	};
 	typedef std::shared_ptr<ResStringPool> ResStringPoolPtr;
